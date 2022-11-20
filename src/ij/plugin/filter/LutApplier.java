@@ -1,12 +1,7 @@
 package ij.plugin.filter;
 import ij.*;
-import ij.gui.*;
 import ij.process.*;
-import ij.measure.*;
-import ij.util.*;
 import ij.plugin.frame.ContrastAdjuster;
-import java.awt.*;
-import java.util.*;
 
 /** This plugin implements the Image/Lookup Tables/Apply LUT command. */
 public class LutApplier implements PlugInFilter {

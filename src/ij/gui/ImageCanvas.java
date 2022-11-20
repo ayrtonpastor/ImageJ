@@ -1,22 +1,18 @@
 package ij.gui;
 
 import java.awt.*;
-import java.util.Properties;
 import java.awt.image.*;
 import ij.process.*;
 import ij.measure.*;
 import ij.plugin.*;
 import ij.plugin.frame.Recorder;
 import ij.plugin.frame.RoiManager;
-import ij.plugin.filter.Analyzer;
 import ij.plugin.tool.PlugInTool;
 import ij.macro.*;
 import ij.*;
 import ij.util.*;
-import ij.text.*;
 import java.awt.event.*;
 import java.util.*;
-import java.awt.geom.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -85,7 +81,6 @@ public class ImageCanvas extends Canvas implements MouseListener, MouseMotionLis
 	private boolean scaleToFit;
 	private boolean painted;
 	private boolean hideZoomIndicator;
-	private boolean flattening;
 	private Timer pressTimer;
 	private PopupMenu roiPopupMenu;
 	private static int longClickDelay = 1000; //ms
@@ -299,7 +294,6 @@ public class ImageCanvas extends Canvas implements MouseListener, MouseMotionLis
 	private void drawOverlay(Overlay overlay, Graphics g) {
 		if (imp!=null && imp.getHideOverlay() && overlay!=showAllOverlay)
 			return;
-		flattening = imp!=null && ImagePlus.flattenTitle.equals(imp.getTitle());
 		if (imp!=null && showAllOverlay!=null && overlay!=showAllOverlay)
 			overlay.drawLabels(false);
 		Color labelColor = overlay.getLabelColor();
@@ -640,12 +634,12 @@ public class ImageCanvas extends Canvas implements MouseListener, MouseMotionLis
 						setCursor(defaultCursor);
 					else
 						setCursor(crosshairCursor);
-				} else if (roi!=null && roi.getState()!=roi.CONSTRUCTING && roi.isHandle(sx, sy)>=0) {
+				} else if (roi!=null && roi.getState()!=Roi.CONSTRUCTING && roi.isHandle(sx, sy)>=0) {
 					setCursor(handCursor);
-				} else if ((imp.getOverlay()!=null||showAllOverlay!=null) && overOverlayLabel(sx,sy,ox,oy) && (roi==null||roi.getState()!=roi.CONSTRUCTING)) {
+				} else if ((imp.getOverlay()!=null||showAllOverlay!=null) && overOverlayLabel(sx,sy,ox,oy) && (roi==null||roi.getState()!=Roi.CONSTRUCTING)) {
 					overOverlayLabel = true;
 					setCursor(handCursor);
-				} else if (Prefs.usePointerCursor || (roi!=null && roi.getState()!=roi.CONSTRUCTING && roi.contains(ox, oy)))
+				} else if (Prefs.usePointerCursor || (roi!=null && roi.getState()!=Roi.CONSTRUCTING && roi.contains(ox, oy)))
 					setCursor(defaultCursor);
 				else
 					setCursor(crosshairCursor);
@@ -930,7 +924,6 @@ public class ImageCanvas extends Canvas implements MouseListener, MouseMotionLis
 		double newMag = getLowerZoomLevel(magnification);
 		double srcRatio = (double)srcRect.width/srcRect.height;
 		double imageRatio = (double)imageWidth/imageHeight;
-		double initialMag = imp.getWindow().getInitialMagnification();
 		if (Math.abs(srcRatio-imageRatio)>0.05) {
 			double scale = oldMag/newMag;
 			int newSrcWidth = (int)Math.round(srcRect.width*scale);
@@ -1308,7 +1301,7 @@ public class ImageCanvas extends Canvas implements MouseListener, MouseMotionLis
 		if (roi!=null && roi.getType()==Roi.COMPOSITE && Toolbar.getToolId()==Toolbar.OVAL && Toolbar.getBrushSize()>0)
 			return; // selection brush tool
 		if (roi!=null && (roi.getType()==Roi.POLYGON || roi.getType()==Roi.POLYLINE || roi.getType()==Roi.ANGLE)
-		&& roi.getState()==roi.CONSTRUCTING) {
+		&& roi.getState()==Roi.CONSTRUCTING) {
 			roi.handleMouseUp(sx, sy); // simulate double-click to finalize
 			roi.handleMouseUp(sx, sy); // polygon or polyline selection
 			return;

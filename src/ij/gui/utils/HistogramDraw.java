@@ -3,7 +3,6 @@ package ij.gui.utils;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.HistogramPlot;
-import ij.gui.HistogramWindow;
 import ij.plugin.filter.Analyzer;
 import ij.process.*;
 import java.awt.*;
@@ -33,7 +32,6 @@ public class HistogramDraw {
 			((HistogramPlot) plot).setTitle("Histogram of " + imp.getShortTitle());
 		int x, y;
 		long maxCount2 = 0;
-		int mode2 = 0;
 		long saveModalCount;
 		ip.setColor(Color.black);
 		ip.setLineWidth(1);
@@ -43,7 +41,6 @@ public class HistogramDraw {
 		for (int i = 0; i < plot.getLongHistogram().length; i++) {
 			if ((plot.getLongHistogram()[i] > maxCount2) && (i != plot.getStats().mode)) {
 				maxCount2 = plot.getLongHistogram()[i];
-				mode2 = i;
 			}
 		}
 		plot.setNewMaxCount(plot.getLongHistogram()[plot.getStats().mode]);
@@ -53,13 +50,14 @@ public class HistogramDraw {
 			plot.drawLogPlot(plot.getyMax() > 0 ? plot.getyMax() : plot.getNewMaxCount(), ip);
 		plot.drawPlot(plot.getyMax() > 0 ? plot.getyMax() : plot.getNewMaxCount(), ip);
 		plot.getLongHistogram()[plot.getStats().mode] = saveModalCount;
-		x = plot.getXMARGIN() + 1;
-		y = plot.getYMARGIN() + plot.getHIST_HEIGHT() + 2;
+		x = IHistogramDraw.XMARGIN + 1;
+		y = IHistogramDraw.YMARGIN + IHistogramDraw.HIST_HEIGHT + 2;
 		if (imp == null)
-			plot.getLut().drawUnscaledColorBar(ip, x - 1, y, plot.getHIST_WIDTH(), plot.getBAR_HEIGHT());
+			plot.getLut().drawUnscaledColorBar(ip, x - 1, y, IHistogramDraw.HIST_WIDTH, IHistogramDraw.BAR_HEIGHT);
 		else
-			plot.drawAlignedColorBar(imp, xMin, xMax, ip, x - 1, y, plot.getHIST_WIDTH(), plot.getBAR_HEIGHT());
-		y += plot.getBAR_HEIGHT() + (int) (15 * plot.getSCALE());
+			plot.drawAlignedColorBar(imp, xMin, xMax, ip, x - 1, y, IHistogramDraw.HIST_WIDTH,
+					IHistogramDraw.BAR_HEIGHT);
+		y += IHistogramDraw.BAR_HEIGHT + (int) (15 * IHistogramDraw.SCALE);
 		drawText(ip, x, y, fixedRange);
 		plot.setSrcImageID(imp.getID());
 
@@ -74,47 +72,40 @@ public class HistogramDraw {
 		if (fixedRange && !plot.getCal().calibrated() && hmin == 0 && hmax == 255)
 			range = 256;
 		ip.drawString(d2s(hmin), x - 4, y);
-		ip.drawString(d2s(hmax), x + plot.getHIST_WIDTH() - getWidth(hmax, ip) + 10, y);
-		if (plot.getRgbMode() >= plot.getINTENSITY1()) {
-			x += plot.getHIST_WIDTH() / 2;
+		ip.drawString(d2s(hmax), x + IHistogramDraw.HIST_WIDTH - getWidth(hmax, ip) + 10, y);
+		if (plot.getRgbMode() >= IHistogramDraw.INTENSITY1) {
+			x += IHistogramDraw.HIST_WIDTH / 2;
 			y += 1;
 			ip.setJustification(ImageProcessor.CENTER_JUSTIFY);
 			boolean weighted = ((ColorProcessor) ip).weightedHistogram();
 
 			final int rgbMode = plot.getRgbMode();
-
-			final int INTENSITY1 = plot.getINTENSITY1();
-			final int INTENSITY2 = plot.getINTENSITY2();
-			final int RGB = plot.getRGB();
-			final int RED = plot.getRED();
-			final int GREEN = plot.getGREEN();
-			final int BLUE = plot.getBLUE();
-			if (rgbMode == INTENSITY1)
+			if (rgbMode == IHistogramDraw.INTENSITY1)
 				ip.drawString((weighted ? "Intensity (weighted)" : "Intensity (unweighted)"), x, y);
-			else if (rgbMode == INTENSITY2)
+			else if (rgbMode == IHistogramDraw.INTENSITY2)
 				ip.drawString("Intensity (unweighted)", x, y);
-			else if (rgbMode == RGB)
+			else if (rgbMode == IHistogramDraw.RGB)
 				ip.drawString("RGB", x, y);
-			else if (rgbMode == RED)
+			else if (rgbMode == IHistogramDraw.RED)
 				ip.drawString("Red", x, y);
-			else if (rgbMode == GREEN)
+			else if (rgbMode == IHistogramDraw.GREEN)
 				ip.drawString("Green", x, y);
-			else if (rgbMode == BLUE)
+			else if (rgbMode == IHistogramDraw.BLUE)
 				ip.drawString("Blue", x, y);
 			ip.setJustification(ImageProcessor.LEFT_JUSTIFY);
 		}
 		double binWidth = range / plot.getStats().nBins;
 		binWidth = Math.abs(binWidth);
 		plot.setShowBins(binWidth != 1.0 || !fixedRange);
-		plot.setCol1(plot.getXMARGIN() + 5);
-		plot.setCol2(plot.getXMARGIN() + plot.getHIST_WIDTH() / 2);
-		plot.setRow1(y + (int) (25 * plot.getSCALE()));
+		plot.setCol1(IHistogramDraw.XMARGIN + 5);
+		plot.setCol2(IHistogramDraw.XMARGIN + IHistogramDraw.HIST_WIDTH / 2);
+		plot.setRow1(y + (int) (25 * IHistogramDraw.SCALE));
 		if (plot.isShowBins())
-			plot.setRow1(plot.getRow1() - (int) (8 * plot.getSCALE()));
-		plot.setRow2(plot.getRow1() + (int) (15 * plot.getSCALE()));
-		plot.setRow3(plot.getRow2() + (int) (15 * plot.getSCALE()));
-		plot.setRow4(plot.getRow3() + (int) (15 * plot.getSCALE()));
-		plot.setRow5(plot.getRow4() + (int) (15 * plot.getSCALE()));
+			plot.setRow1(plot.getRow1() - (int) (8 * IHistogramDraw.SCALE));
+		plot.setRow2(plot.getRow1() + (int) (15 * IHistogramDraw.SCALE));
+		plot.setRow3(plot.getRow2() + (int) (15 * IHistogramDraw.SCALE));
+		plot.setRow4(plot.getRow3() + (int) (15 * IHistogramDraw.SCALE));
+		plot.setRow5(plot.getRow4() + (int) (15 * IHistogramDraw.SCALE));
 		long count = plot.getStats().longPixelCount > 0 ? plot.getStats().longPixelCount : plot.getStats().pixelCount;
 		String modeCount = " (" + plot.getStats().maxCount + ")";
 		if (modeCount.length() > 12)

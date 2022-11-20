@@ -1,7 +1,6 @@
 package ij.process;
 
 import java.awt.*;
-import java.awt.image.*;
 import ij.*;
 import ij.gui.*;
 import ij.measure.*;

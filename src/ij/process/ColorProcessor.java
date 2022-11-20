@@ -1,9 +1,7 @@
 package ij.process;
 
-import java.util.*;
 import java.awt.*;
 import java.awt.image.*;
-import ij.gui.*;
 import ij.ImageStack;
 
 /**

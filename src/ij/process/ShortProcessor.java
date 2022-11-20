@@ -3,7 +3,6 @@
 import java.util.*;
 import java.awt.*;
 import java.awt.image.*;
-import ij.gui.*;
 
 /** ShortProcessors contain a 16-bit unsigned image
 	and methods that operate on that image. */

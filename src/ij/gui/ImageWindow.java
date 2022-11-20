@@ -1,10 +1,7 @@
 package ij.gui;
 import java.awt.*;
-import java.awt.image.*;
-import java.util.Properties;
 import java.awt.event.*;
 import ij.*;
-import ij.process.*;
 import ij.io.*;
 import ij.measure.*;
 import ij.plugin.frame.*;
@@ -25,7 +22,6 @@ public class ImageWindow extends Frame implements FocusListener, WindowListener,
 	protected ImageJ ij;
 	protected ImageCanvas ic;
 	private double initialMagnification = 1;
-	private int newWidth, newHeight;
 	protected boolean closed;
 	private boolean newCanvas;
 	private boolean unzoomWhenMinimizing = true;

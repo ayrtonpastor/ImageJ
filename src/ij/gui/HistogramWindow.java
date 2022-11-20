@@ -5,26 +5,16 @@ import java.awt.image.*;
 import java.awt.event.*;
 import java.io.*;
 import java.awt.datatransfer.*;
-import java.util.ArrayList;
 import ij.*;
 import ij.gui.utils.HistogramDraw;
 import ij.gui.utils.IHistogramDraw;
 import ij.process.*;
 import ij.measure.*;
 import ij.plugin.filter.Analyzer;
-import ij.text.TextWindow;
 
 /** This class is an extended ImageWindow that displays histograms. */
 public class HistogramWindow extends ImageWindow implements Measurements, ActionListener,
 		ClipboardOwner, ImageListener, RoiListener, Runnable, IHistogramDraw {
-	private static final double SCALE = HistogramPlot.SCALE;
-	static final int HIST_WIDTH = HistogramPlot.HIST_WIDTH;
-	static final int HIST_HEIGHT = HistogramPlot.HIST_HEIGHT;
-	static final int XMARGIN = HistogramPlot.XMARGIN;
-	static final int YMARGIN = HistogramPlot.YMARGIN;
-	static final int WIN_WIDTH = HistogramPlot.WIN_WIDTH;
-	static final int WIN_HEIGHT = HistogramPlot.WIN_HEIGHT;
-	static final int BAR_HEIGHT = HistogramPlot.BAR_HEIGHT;
 
 	static final int INTENSITY1 = 0, INTENSITY2 = 1, RGB = 2, RED = 3, GREEN = 4, BLUE = 5;
 
@@ -210,7 +200,6 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		ip.setColor(Color.white);
 		ip.resetRoi();
 		ip.fill();
-		ImageProcessor srcIP = srcImp.getProcessor();
 		drawHistogram(srcImp, ip, fixedRange, stats.histMin, stats.histMax);
 		imp.updateAndDraw();
 	}
@@ -1040,75 +1029,5 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 
 	public boolean shouldDrawLogPlot() {
 		return logScale || IJ.shiftKeyDown() && !liveMode();
-	}
-
-	@Override
-	public int getHIST_HEIGHT() {
-		return HIST_HEIGHT;
-	}
-
-	@Override
-	public int getBAR_HEIGHT() {
-		return BAR_HEIGHT;
-	}
-
-	@Override
-	public int getHIST_WIDTH() {
-		return HIST_WIDTH;
-	}
-
-	@Override
-	public int getINTENSITY1() {
-		return INTENSITY1;
-	}
-
-	@Override
-	public int getINTENSITY2() {
-		return INTENSITY2;
-	}
-
-	@Override
-	public int getRGB() {
-		return RGB;
-	}
-
-	@Override
-	public int getRED() {
-		return RED;
-	}
-
-	@Override
-	public int getGREEN() {
-		return GREEN;
-	}
-
-	@Override
-	public int getBLUE() {
-		return BLUE;
-	}
-
-	@Override
-	public int getYMARGIN() {
-		return YMARGIN;
-	}
-
-	@Override
-	public int getXMARGIN() {
-		return XMARGIN;
-	}
-
-	@Override
-	public double getSCALE() {
-		return SCALE;
-	}
-
-	@Override
-	public int getWIN_WIDTH() {
-		return WIN_WIDTH;
-	}
-
-	@Override
-	public int getWIN_HEIGHT() {
-		return WIN_HEIGHT;
 	}
 }

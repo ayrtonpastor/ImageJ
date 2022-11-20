@@ -6,7 +6,6 @@ import ij.plugin.Straightener;
 import ij.plugin.frame.Recorder;
 import ij.plugin.CalibrationBar;
 import java.awt.*;
-import java.awt.image.*;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.awt.event.*;
@@ -543,8 +542,6 @@ public class Line extends Roi {
 	 *  Otherwise draws the outline of the area of this line */
 	public void drawPixels(ImageProcessor ip) {
 		ip.setLineWidth(1);
-		double x = getXBase();
-		double y = getYBase();
 		x1d=getXBase()+x1R; y1d=getYBase()+y1R; x2d=getXBase()+x2R; y2d=getYBase()+y2R;
 		if (getStrokeWidth()<=1) {
 			ip.moveTo((int)Math.round(x1d), (int)Math.round(y1d));

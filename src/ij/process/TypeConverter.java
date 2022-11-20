@@ -1,9 +1,5 @@
 package ij.process;
-import java.awt.*;
 import java.awt.image.*;
-import ij.*;
-import ij.gui.*;
-import ij.measure.*;
 
 /** This class converts an ImageProcessor to another data type. */
 public class TypeConverter {

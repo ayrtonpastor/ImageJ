@@ -4,11 +4,23 @@ import java.awt.*;
 
 import ij.ImagePlus;
 import ij.LookUpTable;
+import ij.Prefs;
 import ij.measure.Calibration;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
 
 public interface IHistogramDraw {
+    static final double SCALE = Prefs.getGuiScale();
+    static final int HIST_WIDTH = (int) (SCALE * 256);
+    static final int HIST_HEIGHT = (int) (SCALE * 128);
+    static final int XMARGIN = (int) (20 * SCALE);
+    static final int YMARGIN = (int) (10 * SCALE);
+    static final int WIN_WIDTH = HIST_WIDTH + (int) (44 * SCALE);
+    static final int WIN_HEIGHT = HIST_HEIGHT + (int) (118 * SCALE);
+    static final int BAR_HEIGHT = (int) (SCALE * 12);
+    static final int INTENSITY1 = 0, INTENSITY2 = 1, RGB = 2, RED = 3, GREEN = 4, BLUE = 5;
+    static final Color frameColor = new Color(30, 60, 120);
+
     public int getSrcImageID();
 
     public void setSrcImageID(int srcImageID);
@@ -16,10 +28,6 @@ public interface IHistogramDraw {
     public LookUpTable getLut();
 
     public void setLut(LookUpTable lut);
-
-    public int getHIST_HEIGHT();
-
-    public int getBAR_HEIGHT();
 
     public int getyMax();
 
@@ -59,23 +67,9 @@ public interface IHistogramDraw {
 
     public void setStats(ImageStatistics stats);
 
-    public int getHIST_WIDTH();
-
     public int getRgbMode();
 
     public void setRgbMode(int rgbMode);
-
-    public int getINTENSITY1();
-
-    public int getINTENSITY2();
-
-    public int getRGB();
-
-    public int getRED();
-
-    public int getGREEN();
-
-    public int getBLUE();
 
     public boolean isShowBins();
 
@@ -108,16 +102,6 @@ public interface IHistogramDraw {
     public int getRow5();
 
     public void setRow5(int row5);
-
-    public int getYMARGIN();
-
-    public int getXMARGIN();
-
-    public double getSCALE();
-
-    public int getWIN_WIDTH();
-
-    public int getWIN_HEIGHT();
 
     public void drawAlignedColorBar(ImagePlus imp, double xMin, double xMax, ImageProcessor ip, int x, int y,
             int width,
