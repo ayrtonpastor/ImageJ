@@ -1,5 +1,8 @@
 package ij.gui;
+
 import ij.*;
+import ij.gui.utils.HistogramDraw;
+import ij.gui.utils.IHistogramDraw;
 import ij.process.*;
 import ij.plugin.filter.Analyzer;
 import ij.measure.*;
@@ -7,18 +10,18 @@ import ij.macro.Interpreter;
 import java.awt.*;
 import java.awt.image.*;
 
-public class HistogramPlot extends ImagePlus {
+public class HistogramPlot extends ImagePlus implements IHistogramDraw {
 	static final double SCALE = Prefs.getGuiScale();
-	static final int HIST_WIDTH = (int)(SCALE*256);
-	static final int HIST_HEIGHT = (int)(SCALE*128);
-	static final int XMARGIN = (int)(20*SCALE);
-	static final int YMARGIN = (int)(10*SCALE);
-	static final int WIN_WIDTH = HIST_WIDTH + (int)(44*SCALE);
-	static final int WIN_HEIGHT = HIST_HEIGHT + (int)(118*SCALE);
-	static final int BAR_HEIGHT = (int)(SCALE*12);
-	static final int INTENSITY1=0, INTENSITY2=1, RGB=2, RED=3, GREEN=4, BLUE=5;
-	static final Color frameColor = new Color(30,60,120);
-	
+	static final int HIST_WIDTH = (int) (SCALE * 256);
+	static final int HIST_HEIGHT = (int) (SCALE * 128);
+	static final int XMARGIN = (int) (20 * SCALE);
+	static final int YMARGIN = (int) (10 * SCALE);
+	static final int WIN_WIDTH = HIST_WIDTH + (int) (44 * SCALE);
+	static final int WIN_HEIGHT = HIST_HEIGHT + (int) (118 * SCALE);
+	static final int BAR_HEIGHT = (int) (SCALE * 12);
+	static final int INTENSITY1 = 0, INTENSITY2 = 1, RGB = 2, RED = 3, GREEN = 4, BLUE = 5;
+	static final Color frameColor = new Color(30, 60, 120);
+
 	int rgbMode = -1;
 	ImageStatistics stats;
 	boolean stackHistogram;
@@ -26,346 +29,580 @@ public class HistogramPlot extends ImagePlus {
 	long[] histogram;
 	LookUpTable lut;
 	int decimalPlaces;
-	int digits; 
+	int digits;
 	long newMaxCount;
 	boolean logScale;
 	int yMax;
 	int srcImageID;
 	Rectangle frame;
-	Font font = new Font("SansSerif",Font.PLAIN,(int)(12*SCALE));
+	Font font = new Font("SansSerif", Font.PLAIN, (int) (12 * SCALE));
 	boolean showBins;
 	int col1, col2, row1, row2, row3, row4, row5;
-	    
+	HistogramDraw histogramDraw;
+
 	public HistogramPlot() {
+		histogramDraw = new HistogramDraw(this);
 		setImage(NewImage.createRGBImage("Histogram", WIN_WIDTH, WIN_HEIGHT, 1, NewImage.FILL_WHITE));
 	}
 
-	/** Plots a histogram using the specified title and number of bins. 
-		Currently, the number of bins must be 256 expect for 32 bit images. */
+	/**
+	 * Plots a histogram using the specified title and number of bins.
+	 * Currently, the number of bins must be 256 expect for 32 bit images.
+	 */
 	public void draw(String title, ImagePlus imp, int bins) {
 		draw(imp, bins, 0.0, 0.0, 0);
 	}
 
-	/** Plots a histogram using the specified title, number of bins and histogram range.
-		Currently, the number of bins must be 256 and the histogram range range must be 
-		the same as the image range expect for 32 bit images. */
+	/**
+	 * Plots a histogram using the specified title, number of bins and histogram
+	 * range.
+	 * Currently, the number of bins must be 256 and the histogram range range must
+	 * be
+	 * the same as the image range expect for 32 bit images.
+	 */
 	public void draw(ImagePlus imp, int bins, double histMin, double histMax, int yMax) {
-		boolean limitToThreshold = (Analyzer.getMeasurements()&LIMIT)!=0;
+		boolean limitToThreshold = (Analyzer.getMeasurements() & LIMIT) != 0;
 		ImageProcessor ip = imp.getProcessor();
-		if (ip.getMinThreshold()!=ImageProcessor.NO_THRESHOLD
-		&& ip.getLutUpdateMode()==ImageProcessor.NO_LUT_UPDATE)
-			limitToThreshold = false;  // ignore invisible thresholds
-		if (imp.isRGB() && rgbMode<INTENSITY1)
-			rgbMode=INTENSITY1;
-		if (rgbMode==RED||rgbMode==GREEN||rgbMode==BLUE) {
+		if (ip.getMinThreshold() != ImageProcessor.NO_THRESHOLD
+				&& ip.getLutUpdateMode() == ImageProcessor.NO_LUT_UPDATE)
+			limitToThreshold = false; // ignore invisible thresholds
+		if (imp.isRGB() && rgbMode < INTENSITY1)
+			rgbMode = INTENSITY1;
+		if (rgbMode == RED || rgbMode == GREEN || rgbMode == BLUE) {
 			int channel = rgbMode - 2;
-			ColorProcessor cp = (ColorProcessor)imp.getProcessor();
+			ColorProcessor cp = (ColorProcessor) imp.getProcessor();
 			ip = cp.getChannel(channel, null);
 			ImagePlus imp2 = new ImagePlus("", ip);
 			imp2.setRoi(imp.getRoi());
-			stats = imp2.getStatistics(AREA+MEAN+MODE+MIN_MAX, bins, histMin, histMax);
-		} else if (rgbMode==RGB)
+			stats = imp2.getStatistics(AREA + MEAN + MODE + MIN_MAX, bins, histMin, histMax);
+		} else if (rgbMode == RGB)
 			stats = RGBHistogram(imp, bins, histMin, histMax);
 		else
-			stats = imp.getStatistics(AREA+MEAN+MODE+MIN_MAX+(limitToThreshold?LIMIT:0), bins, histMin, histMax);
+			stats = imp.getStatistics(AREA + MEAN + MODE + MIN_MAX + (limitToThreshold ? LIMIT : 0), bins, histMin,
+					histMax);
 		draw(imp, stats);
 	}
-	
+
 	private ImageStatistics RGBHistogram(ImagePlus imp, int bins, double histMin, double histMax) {
-		ImageProcessor ip = (ColorProcessor)imp.getProcessor();
+		ImageProcessor ip = (ColorProcessor) imp.getProcessor();
 		ip = ip.crop();
 		int w = ip.getWidth();
 		int h = ip.getHeight();
-		ImageProcessor ip2 = new ByteProcessor(w*3, h);
+		ImageProcessor ip2 = new ByteProcessor(w * 3, h);
 		ByteProcessor temp = null;
-		for (int i=0; i<3; i++) {
-			temp = ((ColorProcessor)ip).getChannel(i+1,temp);
-			ip2.insert(temp, i*w, 0);
+		for (int i = 0; i < 3; i++) {
+			temp = ((ColorProcessor) ip).getChannel(i + 1, temp);
+			ip2.insert(temp, i * w, 0);
 		}
 		ImagePlus imp2 = new ImagePlus("imp2", ip2);
-		return imp2.getStatistics(AREA+MEAN+MODE+MIN_MAX, bins, histMin, histMax);
+		return imp2.getStatistics(AREA + MEAN + MODE + MIN_MAX, bins, histMin, histMax);
 	}
 
 	/** Draws the histogram using the specified title and ImageStatistics. */
 	public void draw(ImagePlus imp, ImageStatistics stats) {
-		if (imp.isRGB() && rgbMode<INTENSITY1)
-			rgbMode=INTENSITY1;
+		if (imp.isRGB() && rgbMode < INTENSITY1)
+			rgbMode = INTENSITY1;
 		stackHistogram = stats.stackStatistics;
 		this.stats = stats;
 		this.yMax = stats.histYMax;
 		cal = imp.getCalibration();
-		boolean limitToThreshold = (Analyzer.getMeasurements()&LIMIT)!=0;
+		boolean limitToThreshold = (Analyzer.getMeasurements() & LIMIT) != 0;
 		imp.getMask();
 		histogram = stats.getHistogram();
 		lut = imp.createLut();
 		int type = imp.getType();
-		boolean fixedRange = type==ImagePlus.GRAY8 || type==ImagePlus.COLOR_256 || imp.isRGB();
+		boolean fixedRange = type == ImagePlus.GRAY8 || type == ImagePlus.COLOR_256 || imp.isRGB();
 		ip.setColor(Color.white);
 		ip.resetRoi();
 		ip.fill();
 		ImageProcessor srcIP = imp.getProcessor();
 		drawHistogram(imp, ip, fixedRange, stats.histMin, stats.histMax);
 	}
-	
+
 	protected void drawHistogram(ImageProcessor ip, boolean fixedRange) {
 		drawHistogram(null, ip, fixedRange, 0.0, 0.0);
 	}
 
 	void drawHistogram(ImagePlus imp, ImageProcessor ip, boolean fixedRange, double xMin, double xMax) {
-		setTitle("Histogram of "+imp.getShortTitle());
-		int x, y;
-		long maxCount2 = 0;
-		int mode2 = 0;
-		long saveModalCount;		    	
-		ip.setColor(Color.black);
-		ip.setLineWidth(1);
-		decimalPlaces = Analyzer.getPrecision();
-		digits = cal.calibrated()||stats.binSize!=1.0?decimalPlaces:0;
-		saveModalCount = histogram[stats.mode];
-		for (int i = 0; i<histogram.length; i++) {
- 			if ((histogram[i] > maxCount2) && (i != stats.mode)) {
-				maxCount2 = histogram[i];
-				mode2 = i;
-  			}
-  		}
-		newMaxCount = histogram[stats.mode];
-		if ((newMaxCount>(maxCount2 * 2)) && (maxCount2 != 0))
-			newMaxCount = (int)(maxCount2 * 1.5);
-		if (logScale)
-			drawLogPlot(yMax>0?yMax:newMaxCount, ip);
-		drawPlot(yMax>0?yMax:newMaxCount, ip);
-		histogram[stats.mode] = saveModalCount;
- 		x = XMARGIN + 1;
-		y = YMARGIN + HIST_HEIGHT + 2;
-		if (imp==null)
-			lut.drawUnscaledColorBar(ip, x-1, y, HIST_WIDTH, BAR_HEIGHT);
-		else
-			drawAlignedColorBar(imp, xMin, xMax, ip, x-1, y, HIST_WIDTH, BAR_HEIGHT);
-		y += BAR_HEIGHT+(int)(15*SCALE);
-  		drawText(ip, x, y, fixedRange);
-  		srcImageID = imp.getID();
+		histogramDraw.drawHistogram(imp, ip, fixedRange, xMin, xMax);
 	}
-       
-	void drawAlignedColorBar(ImagePlus imp, double xMin, double xMax, ImageProcessor ip, int x, int y, int width, int height) {
+
+	public void drawAlignedColorBar(ImagePlus imp, double xMin, double xMax, ImageProcessor ip, int x, int y, int width,
+			int height) {
 		ImageProcessor ipSource = imp.getProcessor();
 		float[] pixels = null;
 		ImageProcessor ipRamp = null;
-		if (rgbMode>=INTENSITY1) {
+		if (rgbMode >= INTENSITY1) {
 			ipRamp = new FloatProcessor(width, height);
-			if (rgbMode==RED)
+			if (rgbMode == RED)
 				ipRamp.setColorModel(LUT.createLutFromColor(Color.red));
-			else if (rgbMode==GREEN)
+			else if (rgbMode == GREEN)
 				ipRamp.setColorModel(LUT.createLutFromColor(Color.green));
-			else if (rgbMode==BLUE)
+			else if (rgbMode == BLUE)
 				ipRamp.setColorModel(LUT.createLutFromColor(Color.blue));
-			pixels = (float[])ipRamp.getPixels();
+			pixels = (float[]) ipRamp.getPixels();
 		} else
-			pixels = new float[width*height];
-		for (int j=0; j<height; j++) {
-			for(int i=0; i<width; i++)
-				pixels[i+width*j] = (float)(xMin+i*(xMax-xMin)/(width - 1));
+			pixels = new float[width * height];
+		for (int j = 0; j < height; j++) {
+			for (int i = 0; i < width; i++)
+				pixels[i + width * j] = (float) (xMin + i * (xMax - xMin) / (width - 1));
 		}
 		double min = ipSource.getMin();
 		double max = ipSource.getMax();
-		if (ipSource.getNChannels()==1) {
+		if (ipSource.getNChannels() == 1) {
 			ColorModel cm = null;
 			if (imp.isComposite()) {
-				if (stats!=null && stats.pixelCount>ipSource.getPixelCount()) { // stack histogram
+				if (stats != null && stats.pixelCount > ipSource.getPixelCount()) { // stack histogram
 					cm = LUT.createLutFromColor(Color.white);
 					min = stats.min;
 					max = stats.max;
 				} else
-					cm = ((CompositeImage)imp).getChannelLut();
-			} else if (ipSource.getMinThreshold()==ImageProcessor.NO_THRESHOLD)
+					cm = ((CompositeImage) imp).getChannelLut();
+			} else if (ipSource.getMinThreshold() == ImageProcessor.NO_THRESHOLD)
 				cm = ipSource.getColorModel();
 			else
 				cm = ipSource.getCurrentColorModel();
 			ipRamp = new FloatProcessor(width, height, pixels, cm);
 		}
-		ipRamp.setMinAndMax(min,max);
+		ipRamp.setMinAndMax(min, max);
 		ImageProcessor bar = null;
 		if (ip instanceof ColorProcessor)
 			bar = ipRamp.convertToRGB();
 		else
 			bar = ipRamp.convertToByte(true);
-		ip.insert(bar, x,y);
+		ip.insert(bar, x, y);
 		ip.setColor(Color.black);
-		ip.drawRect(x-1, y, width+2, height);
+		ip.drawRect(x - 1, y, width + 2, height);
 	}
 
 	/** Scales a threshold level to the range 0-255. */
 	int scaleDown(ImageProcessor ip, double threshold) {
 		double min = ip.getMin();
 		double max = ip.getMax();
-		if (max>min)
-			return (int)(((threshold-min)/(max-min))*255.0);
+		if (max > min)
+			return (int) (((threshold - min) / (max - min)) * 255.0);
 		else
 			return 0;
 	}
 
-	void drawPlot(long maxCount, ImageProcessor ip) {
-		if (maxCount==0) maxCount = 1;
+	public void drawPlot(long maxCount, ImageProcessor ip) {
+		if (maxCount == 0)
+			maxCount = 1;
 		frame = new Rectangle(XMARGIN, YMARGIN, HIST_WIDTH, HIST_HEIGHT);
-		if (histogram.length==256) {
-			double scale2 = HIST_WIDTH/256.0;
+		if (histogram.length == 256) {
+			double scale2 = HIST_WIDTH / 256.0;
 			int barWidth = 1;
-			if (SCALE>1) barWidth=2;
-			if (SCALE>2) barWidth=3;
+			if (SCALE > 1)
+				barWidth = 2;
+			if (SCALE > 2)
+				barWidth = 3;
 			for (int i = 0; i < 256; i++) {
-				int x =(int)(i*scale2);
-				int y = (int)(((double)HIST_HEIGHT*(double)histogram[i])/maxCount);
-				if (y>HIST_HEIGHT) y = HIST_HEIGHT;
-				for (int j = 0; j<barWidth; j++)
-					ip.drawLine(x+j+XMARGIN, YMARGIN+HIST_HEIGHT, x+j+XMARGIN, YMARGIN+HIST_HEIGHT-y);
+				int x = (int) (i * scale2);
+				int y = (int) (((double) HIST_HEIGHT * (double) histogram[i]) / maxCount);
+				if (y > HIST_HEIGHT)
+					y = HIST_HEIGHT;
+				for (int j = 0; j < barWidth; j++)
+					ip.drawLine(x + j + XMARGIN, YMARGIN + HIST_HEIGHT, x + j + XMARGIN, YMARGIN + HIST_HEIGHT - y);
 			}
-		} else if (histogram.length<=HIST_WIDTH) {
+		} else if (histogram.length <= HIST_WIDTH) {
 			int index, y;
-			for (int i=0; i<HIST_WIDTH; i++) {
-				index = (int)(i*(double)histogram.length/HIST_WIDTH); 
-				y = (int)(((double)HIST_HEIGHT*(double)histogram[index])/maxCount);
-				if (y>HIST_HEIGHT) y = HIST_HEIGHT;
-				ip.drawLine(i+XMARGIN, YMARGIN+HIST_HEIGHT, i+XMARGIN, YMARGIN+HIST_HEIGHT-y);
+			for (int i = 0; i < HIST_WIDTH; i++) {
+				index = (int) (i * (double) histogram.length / HIST_WIDTH);
+				y = (int) (((double) HIST_HEIGHT * (double) histogram[index]) / maxCount);
+				if (y > HIST_HEIGHT)
+					y = HIST_HEIGHT;
+				ip.drawLine(i + XMARGIN, YMARGIN + HIST_HEIGHT, i + XMARGIN, YMARGIN + HIST_HEIGHT - y);
 			}
 		} else {
-			double xscale = (double)HIST_WIDTH/histogram.length; 
-			for (int i=0; i<histogram.length; i++) {
+			double xscale = (double) HIST_WIDTH / histogram.length;
+			for (int i = 0; i < histogram.length; i++) {
 				long value = histogram[i];
-				if (value>0L) {
-					int y = (int)(((double)HIST_HEIGHT*(double)value)/maxCount);
-					if (y>HIST_HEIGHT) y = HIST_HEIGHT;
-					int x = (int)(i*xscale)+XMARGIN;
-					ip.drawLine(x, YMARGIN+HIST_HEIGHT, x, YMARGIN+HIST_HEIGHT-y);
+				if (value > 0L) {
+					int y = (int) (((double) HIST_HEIGHT * (double) value) / maxCount);
+					if (y > HIST_HEIGHT)
+						y = HIST_HEIGHT;
+					int x = (int) (i * xscale) + XMARGIN;
+					ip.drawLine(x, YMARGIN + HIST_HEIGHT, x, YMARGIN + HIST_HEIGHT - y);
 				}
 			}
 		}
 		ip.setColor(frameColor);
-		ip.drawRect(frame.x-1, frame.y, frame.width+2, frame.height+1);
+		ip.drawRect(frame.x - 1, frame.y, frame.width + 2, frame.height + 1);
 		ip.setColor(Color.black);
 	}
-		
-	void drawLogPlot (long maxCount, ImageProcessor ip) {
+
+	public void drawLogPlot(long maxCount, ImageProcessor ip) {
 		frame = new Rectangle(XMARGIN, YMARGIN, HIST_WIDTH, HIST_HEIGHT);
-		ip.drawRect(frame.x-1, frame.y, frame.width+2, frame.height+1);
+		ip.drawRect(frame.x - 1, frame.y, frame.width + 2, frame.height + 1);
 		double max = Math.log(maxCount);
 		ip.setColor(Color.gray);
-		if (histogram.length==256) {
-			double scale2 = HIST_WIDTH/256.0;
+		if (histogram.length == 256) {
+			double scale2 = HIST_WIDTH / 256.0;
 			int barWidth = 1;
-			if (SCALE>1) barWidth=2;
-			if (SCALE>2) barWidth=3;
-			for (int i=0; i < 256; i++) {
-				int x =(int)(i*scale2);
-				int y = histogram[i]==0?0:(int)(HIST_HEIGHT*Math.log(histogram[i])/max);
-				if (y>HIST_HEIGHT) y = HIST_HEIGHT;
-				for (int j = 0; j<barWidth; j++)
-					ip.drawLine(x+j+XMARGIN, YMARGIN+HIST_HEIGHT, x+j+XMARGIN, YMARGIN+HIST_HEIGHT-y);
+			if (SCALE > 1)
+				barWidth = 2;
+			if (SCALE > 2)
+				barWidth = 3;
+			for (int i = 0; i < 256; i++) {
+				int x = (int) (i * scale2);
+				int y = histogram[i] == 0 ? 0 : (int) (HIST_HEIGHT * Math.log(histogram[i]) / max);
+				if (y > HIST_HEIGHT)
+					y = HIST_HEIGHT;
+				for (int j = 0; j < barWidth; j++)
+					ip.drawLine(x + j + XMARGIN, YMARGIN + HIST_HEIGHT, x + j + XMARGIN, YMARGIN + HIST_HEIGHT - y);
 			}
-		} else if (histogram.length<=HIST_WIDTH) {
+		} else if (histogram.length <= HIST_WIDTH) {
 			int index, y;
-			for (int i = 0; i<HIST_WIDTH; i++) {
-				index = (int)(i*(double)histogram.length/HIST_WIDTH); 
-				y = histogram[index]==0?0:(int)(HIST_HEIGHT*Math.log(histogram[index])/max);
-				if (y>HIST_HEIGHT) y = HIST_HEIGHT;
-				ip.drawLine(i+XMARGIN, YMARGIN+HIST_HEIGHT, i+XMARGIN, YMARGIN+HIST_HEIGHT-y);
+			for (int i = 0; i < HIST_WIDTH; i++) {
+				index = (int) (i * (double) histogram.length / HIST_WIDTH);
+				y = histogram[index] == 0 ? 0 : (int) (HIST_HEIGHT * Math.log(histogram[index]) / max);
+				if (y > HIST_HEIGHT)
+					y = HIST_HEIGHT;
+				ip.drawLine(i + XMARGIN, YMARGIN + HIST_HEIGHT, i + XMARGIN, YMARGIN + HIST_HEIGHT - y);
 			}
 		} else {
-			double xscale = (double)HIST_WIDTH/histogram.length; 
-			for (int i=0; i<histogram.length; i++) {
+			double xscale = (double) HIST_WIDTH / histogram.length;
+			for (int i = 0; i < histogram.length; i++) {
 				long value = histogram[i];
-				if (value>0L) {
-					int y = (int)(HIST_HEIGHT*Math.log(value)/max);
-					if (y>HIST_HEIGHT) y = HIST_HEIGHT;
-					int x = (int)(i*xscale)+XMARGIN;
-					ip.drawLine(x, YMARGIN+HIST_HEIGHT, x, YMARGIN+HIST_HEIGHT-y);
+				if (value > 0L) {
+					int y = (int) (HIST_HEIGHT * Math.log(value) / max);
+					if (y > HIST_HEIGHT)
+						y = HIST_HEIGHT;
+					int x = (int) (i * xscale) + XMARGIN;
+					ip.drawLine(x, YMARGIN + HIST_HEIGHT, x, YMARGIN + HIST_HEIGHT - y);
 				}
 			}
 		}
 		ip.setColor(Color.black);
 	}
-		
+
 	void drawText(ImageProcessor ip, int x, int y, boolean fixedRange) {
-		ip.setFont(font);
-		ip.setAntialiasedText(true);
-		double hmin = cal.getCValue(stats.histMin);
-		double hmax = cal.getCValue(stats.histMax);
-		double range = hmax-hmin;
-		if (fixedRange&&!cal.calibrated()&&hmin==0&&hmax==255)
-			range = 256;
-		ip.drawString(d2s(hmin), x - 4, y);
-		ip.drawString(d2s(hmax), x + HIST_WIDTH - getWidth(hmax, ip) + 10, y);
-		if (rgbMode>=INTENSITY1) {
-			x += HIST_WIDTH/2;
-			y += 1;
-			ip.setJustification(ImageProcessor.CENTER_JUSTIFY);
-			boolean weighted = ((ColorProcessor)ip).weightedHistogram();
-			switch (rgbMode) {
-				case INTENSITY1: ip.drawString((weighted?"Intensity (weighted)":"Intensity (unweighted)"), x, y); break;
-				case INTENSITY2: ip.drawString((weighted?"Intensity (unweighted)":"Intensity (weighted)"), x, y); break;
-				case RGB: ip.drawString("R+G+B", x, y); break;
-				case RED: ip.drawString("Red", x, y); break;
-				case GREEN: ip.drawString("Green", x, y); break;
-				case BLUE: ip.drawString("Blue", x, y);  break;
-			}
-			ip.setJustification(ImageProcessor.LEFT_JUSTIFY);
-		}        
-		double binWidth = range/stats.nBins;
-		binWidth = Math.abs(binWidth);
-		showBins = binWidth!=1.0 || !fixedRange;
-		col1 = XMARGIN + 5;
-		col2 = XMARGIN + HIST_WIDTH/2;
-		row1 = y+(int)(25*SCALE);
-		if (showBins) row1 -= (int)(8*SCALE);
-		row2 = row1 + (int)(15*SCALE);
-		row3 = row2 + (int)(15*SCALE);
-		row4 = row3 + (int)(15*SCALE);
-		row5 = row4 + (int)(15*SCALE);
-		long count = stats.longPixelCount>0?stats.longPixelCount:stats.pixelCount;
-		String modeCount = " (" + stats.maxCount + ")";
-		if (modeCount.length()>12) modeCount = "";
-		
-		ip.drawString("N: " + count, col1, row1);
-		ip.drawString("Min: " + d2s(stats.min), col2, row1);
-		ip.drawString("Mean: " + d2s(stats.mean), col1, row2);
-		ip.drawString("Max: " + d2s(stats.max), col2, row2);
-		ip.drawString("StdDev: " + d2s(stats.stdDev), col1, row3);
-		ip.drawString("Mode: " + d2s(stats.dmode) + modeCount, col2, row3);
-		if (showBins) {
-			ip.drawString("Bins: " + d2s(stats.nBins), col1, row4);
-			ip.drawString("Bin Width: " + d2s(binWidth), col2, row4);
-		}
+		histogramDraw.drawText(ip, x, y, fixedRange);
 	}
-	
-	private String d2s(double d) {
-		if ((int)d==d)
-			return IJ.d2s(d, 0);
-		else
-    		return IJ.d2s(d, 3, 8);
-    }
-	
+
 	int getWidth(double d, ImageProcessor ip) {
-		return ip.getStringWidth(d2s(d));
+		return HistogramDraw.getWidth(d, ip);
 	}
-				
-	public int[] getHistogram() {
-		int[] hist = new int[histogram.length];
-		for (int i=0; i<histogram.length; i++)
-			hist[i] = (int)histogram[i];
-		return hist;
+
+	public long[] getLongHistogram() {
+		return histogram;
 	}
 
 	public double[] getXValues() {
 		double[] values = new double[stats.nBins];
-		for (int i=0; i<stats.nBins; i++)
-			values[i] = cal.getCValue(stats.histMin+i*stats.binSize);
+		for (int i = 0; i < stats.nBins; i++)
+			values[i] = cal.getCValue(stats.histMin + i * stats.binSize);
 		return values;
 	}
-	
-    @Override
-    public void show() {
-		if (IJ.isMacro()&&Interpreter.isBatchMode())
+
+	@Override
+	public void show() {
+		if (IJ.isMacro() && Interpreter.isBatchMode())
 			super.show();
 		else
 			new HistogramWindow(this, WindowManager.getImage(srcImageID));
 	}
-	
+
+	public static double getScale() {
+		return SCALE;
+	}
+
+	public static int getHistWidth() {
+		return HIST_WIDTH;
+	}
+
+	public static int getHistHeight() {
+		return HIST_HEIGHT;
+	}
+
+	public static int getXmargin() {
+		return XMARGIN;
+	}
+
+	public static int getYmargin() {
+		return YMARGIN;
+	}
+
+	public static int getWinWidth() {
+		return WIN_WIDTH;
+	}
+
+	public static int getWinHeight() {
+		return WIN_HEIGHT;
+	}
+
+	public static int getBarHeight() {
+		return BAR_HEIGHT;
+	}
+
+	public static int getIntensity1() {
+		return INTENSITY1;
+	}
+
+	public static int getIntensity2() {
+		return INTENSITY2;
+	}
+
+	public static int getRgb() {
+		return RGB;
+	}
+
+	public static int getRed() {
+		return RED;
+	}
+
+	public static int getGreen() {
+		return GREEN;
+	}
+
+	public static int getBlue() {
+		return BLUE;
+	}
+
+	public static Color getFramecolor() {
+		return frameColor;
+	}
+
+	public int getRgbMode() {
+		return rgbMode;
+	}
+
+	public ImageStatistics getStats() {
+		return stats;
+	}
+
+	public boolean isStackHistogram() {
+		return stackHistogram;
+	}
+
+	public Calibration getCal() {
+		return cal;
+	}
+
+	public LookUpTable getLut() {
+		return lut;
+	}
+
+	public int getDecimalPlaces() {
+		return decimalPlaces;
+	}
+
+	public int getDigits() {
+		return digits;
+	}
+
+	public long getNewMaxCount() {
+		return newMaxCount;
+	}
+
+	public boolean isLogScale() {
+		return logScale;
+	}
+
+	public int getyMax() {
+		return yMax;
+	}
+
+	public int getSrcImageID() {
+		return srcImageID;
+	}
+
+	public Font getFont() {
+		return font;
+	}
+
+	public boolean isShowBins() {
+		return showBins;
+	}
+
+	public int getCol1() {
+		return col1;
+	}
+
+	public int getCol2() {
+		return col2;
+	}
+
+	public int getRow1() {
+		return row1;
+	}
+
+	public int getRow2() {
+		return row2;
+	}
+
+	public int getRow3() {
+		return row3;
+	}
+
+	public int getRow4() {
+		return row4;
+	}
+
+	public int getRow5() {
+		return row5;
+	}
+
+	public void setRgbMode(int rgbMode) {
+		this.rgbMode = rgbMode;
+	}
+
+	public void setStats(ImageStatistics stats) {
+		this.stats = stats;
+	}
+
+	public void setStackHistogram(boolean stackHistogram) {
+		this.stackHistogram = stackHistogram;
+	}
+
+	public void setCal(Calibration cal) {
+		this.cal = cal;
+	}
+
+	public void setHistogram(long[] histogram) {
+		this.histogram = histogram;
+	}
+
+	public void setLut(LookUpTable lut) {
+		this.lut = lut;
+	}
+
+	public void setDecimalPlaces(int decimalPlaces) {
+		this.decimalPlaces = decimalPlaces;
+	}
+
+	public void setDigits(int digits) {
+		this.digits = digits;
+	}
+
+	public void setNewMaxCount(long newMaxCount) {
+		this.newMaxCount = newMaxCount;
+	}
+
+	public void setLogScale(boolean logScale) {
+		this.logScale = logScale;
+	}
+
+	public void setyMax(int yMax) {
+		this.yMax = yMax;
+	}
+
+	public void setSrcImageID(int srcImageID) {
+		this.srcImageID = srcImageID;
+	}
+
+	public void setFrame(Rectangle frame) {
+		this.frame = frame;
+	}
+
+	public void setFont(Font font) {
+		this.font = font;
+	}
+
+	public void setShowBins(boolean showBins) {
+		this.showBins = showBins;
+	}
+
+	public void setCol1(int col1) {
+		this.col1 = col1;
+	}
+
+	public void setCol2(int col2) {
+		this.col2 = col2;
+	}
+
+	public void setRow1(int row1) {
+		this.row1 = row1;
+	}
+
+	public void setRow2(int row2) {
+		this.row2 = row2;
+	}
+
+	public void setRow3(int row3) {
+		this.row3 = row3;
+	}
+
+	public void setRow4(int row4) {
+		this.row4 = row4;
+	}
+
+	public void setRow5(int row5) {
+		this.row5 = row5;
+	}
+
+	public boolean shouldDrawLogPlot() {
+		return logScale;
+	}
+
+	@Override
+	public int getHIST_HEIGHT() {
+		return HIST_HEIGHT;
+	}
+
+	@Override
+	public int getBAR_HEIGHT() {
+		return BAR_HEIGHT;
+	}
+
+	@Override
+	public int getHIST_WIDTH() {
+		return HIST_WIDTH;
+	}
+
+	@Override
+	public int getINTENSITY1() {
+		return INTENSITY1;
+	}
+
+	@Override
+	public int getINTENSITY2() {
+		return INTENSITY2;
+	}
+
+	@Override
+	public int getRGB() {
+		return RGB;
+	}
+
+	@Override
+	public int getRED() {
+		return RED;
+	}
+
+	@Override
+	public int getGREEN() {
+		return GREEN;
+	}
+
+	@Override
+	public int getBLUE() {
+		return BLUE;
+	}
+
+	@Override
+	public int getYMARGIN() {
+		return YMARGIN;
+	}
+
+	@Override
+	public int getXMARGIN() {
+		return XMARGIN;
+	}
+
+	@Override
+	public double getSCALE() {
+		return SCALE;
+	}
+
+	@Override
+	public int getWIN_WIDTH() {
+		return WIN_WIDTH;
+	}
+
+	@Override
+	public int getWIN_HEIGHT() {
+		return WIN_HEIGHT;
+	}
+
 }
