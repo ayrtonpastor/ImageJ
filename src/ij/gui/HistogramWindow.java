@@ -7,6 +7,7 @@ import java.io.*;
 import java.awt.datatransfer.*;
 import ij.*;
 import ij.gui.utils.HistogramDraw;
+import ij.gui.utils.HistogramDrawProperties;
 import ij.gui.utils.IHistogramDraw;
 import ij.process.*;
 import ij.measure.*;
@@ -18,52 +19,25 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 
 	static final int INTENSITY1 = 0, INTENSITY2 = 1, RGB = 2, RED = 3, GREEN = 4, BLUE = 5;
 
-	protected ImageStatistics stats;
-	protected long[] histogram;
-	protected LookUpTable lut;
 	protected Rectangle frame = null;
 	protected Button list, save, copy, log, live, rgb;
 	protected Label value, count;
 	protected static String defaultDirectory = null;
-	protected int decimalPlaces;
-	protected int digits;
-	protected long newMaxCount;
 	protected int plotScale = 1;
-	protected boolean logScale;
-	protected Calibration cal;
-	protected int yMax;
 	public static int nBins = 256;
 
-	private int srcImageID; // ID of source image
 	private ImagePlus srcImp; // source image for live histograms
 	private Thread bgThread; // thread background drawing
 	private boolean doUpdate; // tells background thread to update
-	private int rgbMode = -1;
 	private String blankLabel;
 	private boolean stackHistogram;
-	private Font font = new Font("SansSerif", Font.PLAIN, (int) (12 * SCALE));
-	private boolean showBins;
-	private int col1, col2, row1, row2, row3, row4, row5;
+
+	private HistogramDrawProperties windowProps = new HistogramDrawProperties();
 	private HistogramDraw histogramDraw = new HistogramDraw(this);
 
 	public HistogramWindow(HistogramPlot plot, ImagePlus srcImp) {
 		super(plot);
-		srcImageID = srcImp.getID();
-		frame = plot.frame;
-		histogram = plot.histogram;
-		cal = plot.cal;
-		stats = plot.stats;
-		yMax = plot.yMax;
-		newMaxCount = plot.newMaxCount;
-		showBins = plot.showBins;
-		rgbMode = plot.rgbMode;
-		col1 = plot.col1;
-		col2 = plot.col2;
-		row1 = plot.row1;
-		row2 = plot.row2;
-		row3 = plot.row3;
-		row4 = plot.row4;
-		row5 = plot.row5;
+		this.windowProps = plot.getHistogramDrawProperties();
 		if (list == null)
 			setup(srcImp);
 	}
@@ -102,14 +76,14 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 	 */
 	public HistogramWindow(String title, ImagePlus imp, int bins, double histMin, double histMax, int yMax) {
 		super(NewImage.createRGBImage(title, WIN_WIDTH, WIN_HEIGHT, 1, NewImage.FILL_WHITE));
-		this.yMax = yMax;
+		windowProps.yMax = yMax;
 		showHistogram(imp, bins, histMin, histMax);
 	}
 
 	/** Displays a histogram using the specified title and ImageStatistics. */
 	public HistogramWindow(String title, ImagePlus imp, ImageStatistics stats) {
 		super(NewImage.createRGBImage(title, WIN_WIDTH, WIN_HEIGHT, 1, NewImage.FILL_WHITE));
-		this.yMax = stats.histYMax;
+		windowProps.yMax = stats.histYMax;
 		showHistogram(imp, stats);
 	}
 
@@ -134,21 +108,22 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		if (ip.getMinThreshold() != ImageProcessor.NO_THRESHOLD
 				&& ip.getLutUpdateMode() == ImageProcessor.NO_LUT_UPDATE)
 			limitToThreshold = false; // ignore invisible thresholds
-		if (imp.isRGB() && rgbMode < INTENSITY1)
-			rgbMode = INTENSITY1;
-		if (rgbMode == RED || rgbMode == GREEN || rgbMode == BLUE) {
-			int channel = rgbMode - 2;
+		if (imp.isRGB() && windowProps.rgbMode < INTENSITY1)
+			windowProps.rgbMode = INTENSITY1;
+		if (windowProps.rgbMode == RED || windowProps.rgbMode == GREEN || windowProps.rgbMode == BLUE) {
+			int channel = windowProps.rgbMode - 2;
 			ColorProcessor cp = (ColorProcessor) imp.getProcessor();
 			ip = cp.getChannel(channel, null);
 			ImagePlus imp2 = new ImagePlus("", ip);
 			imp2.setRoi(imp.getRoi());
-			stats = imp2.getStatistics(AREA + MEAN + MODE + MIN_MAX, bins, histMin, histMax);
-		} else if (rgbMode == RGB)
-			stats = RGBHistogram(imp, bins, histMin, histMax);
+			windowProps.stats = imp2.getStatistics(AREA + MEAN + MODE + MIN_MAX, bins, histMin, histMax);
+		} else if (windowProps.rgbMode == RGB)
+			windowProps.stats = RGBHistogram(imp, bins, histMin, histMax);
 		else
-			stats = imp.getStatistics(AREA + MEAN + MODE + MIN_MAX + (limitToThreshold ? LIMIT : 0), bins, histMin,
+			windowProps.stats = imp.getStatistics(AREA + MEAN + MODE + MIN_MAX + (limitToThreshold ? LIMIT : 0), bins,
+					histMin,
 					histMax);
-		showHistogram(imp, stats);
+		showHistogram(imp, windowProps.stats);
 	}
 
 	private ImageStatistics RGBHistogram(ImagePlus imp, int bins, double histMin, double histMax) {
@@ -168,28 +143,28 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 
 	/** Draws the histogram using the specified title and ImageStatistics. */
 	public void showHistogram(ImagePlus srcImp, ImageStatistics stats) {
-		if (srcImp.isRGB() && rgbMode < INTENSITY1)
-			rgbMode = INTENSITY1;
+		if (srcImp.isRGB() && windowProps.rgbMode < INTENSITY1)
+			windowProps.rgbMode = INTENSITY1;
 		stackHistogram = stats.stackStatistics;
 		if (list == null)
 			setup(srcImp);
-		this.stats = stats;
-		cal = srcImp.getCalibration();
+		windowProps.stats = stats;
+		windowProps.cal = srcImp.getCalibration();
 		boolean limitToThreshold = (Analyzer.getMeasurements() & LIMIT) != 0;
 		srcImp.getMask();
-		histogram = stats.getHistogram();
-		if (limitToThreshold && histogram.length == 256) {
+		windowProps.histogram = stats.getHistogram();
+		if (limitToThreshold && windowProps.histogram.length == 256) {
 			ImageProcessor ip = srcImp.getProcessor();
 			if (ip.getMinThreshold() != ImageProcessor.NO_THRESHOLD) {
 				int lower = scaleDown(ip, ip.getMinThreshold());
 				int upper = scaleDown(ip, ip.getMaxThreshold());
 				for (int i = 0; i < lower; i++)
-					histogram[i] = 0L;
+					windowProps.histogram[i] = 0L;
 				for (int i = upper + 1; i < 256; i++)
-					histogram[i] = 0L;
+					windowProps.histogram[i] = 0L;
 			}
 		}
-		lut = srcImp.createLut();
+		windowProps.lut = srcImp.createLut();
 		int type = srcImp.getType();
 		boolean fixedRange = type == ImagePlus.GRAY8 || type == ImagePlus.COLOR_256 || srcImp.isRGB();
 		if (imp == null) {
@@ -250,11 +225,11 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 			return;
 		if ((frame != null) && x >= frame.x && x <= (frame.x + frame.width)) {
 			x = (x - frame.x);
-			int index = (int) (x * (SCALE * histogram.length) / HIST_WIDTH / SCALE);
-			if (index >= histogram.length)
-				index = histogram.length - 1;
-			double value = cal.getCValue(stats.histMin + index * stats.binSize);
-			drawValueAndCount(ip, value, histogram[index]);
+			int index = (int) (x * (SCALE * windowProps.histogram.length) / HIST_WIDTH / SCALE);
+			if (index >= windowProps.histogram.length)
+				index = windowProps.histogram.length - 1;
+			double value = windowProps.cal.getCValue(windowProps.stats.histMin + index * windowProps.stats.binSize);
+			drawValueAndCount(ip, value, windowProps.histogram[index]);
 		} else
 			drawValueAndCount(ip, Double.NaN, -1);
 		this.imp.updateAndDraw();
@@ -273,13 +248,13 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		ImageProcessor ipSource = imp.getProcessor();
 		float[] pixels = null;
 		ImageProcessor ipRamp = null;
-		if (rgbMode >= INTENSITY1) {
+		if (windowProps.rgbMode >= INTENSITY1) {
 			ipRamp = new FloatProcessor(width, height);
-			if (rgbMode == RED)
+			if (windowProps.rgbMode == RED)
 				ipRamp.setColorModel(LUT.createLutFromColor(Color.red));
-			else if (rgbMode == GREEN)
+			else if (windowProps.rgbMode == GREEN)
 				ipRamp.setColorModel(LUT.createLutFromColor(Color.green));
-			else if (rgbMode == BLUE)
+			else if (windowProps.rgbMode == BLUE)
 				ipRamp.setColorModel(LUT.createLutFromColor(Color.blue));
 			pixels = (float[]) ipRamp.getPixels();
 		} else
@@ -293,10 +268,11 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		if (ipSource.getNChannels() == 1) {
 			ColorModel cm = null;
 			if (imp.isComposite()) {
-				if (stats != null && stats.pixelCount > ipSource.getPixelCount()) { // stack histogram
+				if (windowProps.stats != null && windowProps.stats.pixelCount > ipSource.getPixelCount()) { // stack
+					// histogram
 					cm = LUT.createLutFromColor(Color.white);
-					min = stats.min;
-					max = stats.max;
+					min = windowProps.stats.min;
+					max = windowProps.stats.max;
 				} else
 					cm = ((CompositeImage) imp).getChannelLut();
 			} else if (ipSource.getMinThreshold() == ImageProcessor.NO_THRESHOLD)
@@ -327,92 +303,11 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 	}
 
 	public void drawPlot(long maxCount, ImageProcessor ip) {
-		if (maxCount == 0)
-			maxCount = 1;
-		frame = new Rectangle(XMARGIN, YMARGIN, HIST_WIDTH, HIST_HEIGHT);
-		ip.drawRect(frame.x - 1, frame.y, frame.width + 2, frame.height + 1);
-		if (histogram.length == 256) {
-			double scale2 = HIST_WIDTH / 256.0;
-			int barWidth = 1;
-			if (SCALE > 1)
-				barWidth = 2;
-			if (SCALE > 2)
-				barWidth = 3;
-			for (int i = 0; i < 256; i++) {
-				int x = (int) (i * scale2);
-				int y = (int) (((double) HIST_HEIGHT * (double) histogram[i]) / maxCount);
-				if (y > HIST_HEIGHT)
-					y = HIST_HEIGHT;
-				for (int j = 0; j < barWidth; j++)
-					ip.drawLine(x + j + XMARGIN, YMARGIN + HIST_HEIGHT, x + j + XMARGIN, YMARGIN + HIST_HEIGHT - y);
-			}
-		} else if (histogram.length <= HIST_WIDTH) {
-			int index, y;
-			for (int i = 0; i < HIST_WIDTH; i++) {
-				index = (int) (i * (double) histogram.length / HIST_WIDTH);
-				y = (int) (((double) HIST_HEIGHT * (double) histogram[index]) / maxCount);
-				if (y > HIST_HEIGHT)
-					y = HIST_HEIGHT;
-				ip.drawLine(i + XMARGIN, YMARGIN + HIST_HEIGHT, i + XMARGIN, YMARGIN + HIST_HEIGHT - y);
-			}
-		} else {
-			double xscale = (double) HIST_WIDTH / histogram.length;
-			for (int i = 0; i < histogram.length; i++) {
-				long value = histogram[i];
-				if (value > 0L) {
-					int y = (int) (((double) HIST_HEIGHT * (double) value) / maxCount);
-					if (y > HIST_HEIGHT)
-						y = HIST_HEIGHT;
-					int x = (int) (i * xscale) + XMARGIN;
-					ip.drawLine(x, YMARGIN + HIST_HEIGHT, x, YMARGIN + HIST_HEIGHT - y);
-				}
-			}
-		}
+		this.histogramDraw.drawPlot(maxCount, ip);
 	}
 
 	public void drawLogPlot(long maxCount, ImageProcessor ip) {
-		frame = new Rectangle(XMARGIN, YMARGIN, HIST_WIDTH, HIST_HEIGHT);
-		ip.drawRect(frame.x - 1, frame.y, frame.width + 2, frame.height + 1);
-		double max = Math.log(maxCount);
-		ip.setColor(Color.gray);
-		if (histogram.length == 256) {
-			double scale2 = HIST_WIDTH / 256.0;
-			int barWidth = 1;
-			if (SCALE > 1)
-				barWidth = 2;
-			if (SCALE > 2)
-				barWidth = 3;
-			for (int i = 0; i < 256; i++) {
-				int x = (int) (i * scale2);
-				int y = histogram[i] == 0 ? 0 : (int) (HIST_HEIGHT * Math.log(histogram[i]) / max);
-				if (y > HIST_HEIGHT)
-					y = HIST_HEIGHT;
-				for (int j = 0; j < barWidth; j++)
-					ip.drawLine(x + j + XMARGIN, YMARGIN + HIST_HEIGHT, x + j + XMARGIN, YMARGIN + HIST_HEIGHT - y);
-			}
-		} else if (histogram.length <= HIST_WIDTH) {
-			int index, y;
-			for (int i = 0; i < HIST_WIDTH; i++) {
-				index = (int) (i * (double) histogram.length / HIST_WIDTH);
-				y = histogram[index] == 0 ? 0 : (int) (HIST_HEIGHT * Math.log(histogram[index]) / max);
-				if (y > HIST_HEIGHT)
-					y = HIST_HEIGHT;
-				ip.drawLine(i + XMARGIN, YMARGIN + HIST_HEIGHT, i + XMARGIN, YMARGIN + HIST_HEIGHT - y);
-			}
-		} else {
-			double xscale = (double) HIST_WIDTH / histogram.length;
-			for (int i = 0; i < histogram.length; i++) {
-				long value = histogram[i];
-				if (value > 0L) {
-					int y = (int) (HIST_HEIGHT * Math.log(value) / max);
-					if (y > HIST_HEIGHT)
-						y = HIST_HEIGHT;
-					int x = (int) (i * xscale) + XMARGIN;
-					ip.drawLine(x, YMARGIN + HIST_HEIGHT, x, YMARGIN + HIST_HEIGHT - y);
-				}
-			}
-		}
-		ip.setColor(Color.black);
+		this.histogramDraw.drawLogPlot(maxCount, ip);
 	}
 
 	void drawText(ImageProcessor ip, int x, int y, boolean fixedRange) {
@@ -421,16 +316,16 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 	}
 
 	private void drawValueAndCount(ImageProcessor ip, double value, long count) {
-		int y = showBins ? row4 : row3;
+		int y = windowProps.showBins ? windowProps.row4 : windowProps.row3;
 		ip.setRoi(0, y, WIN_WIDTH, WIN_HEIGHT - y);
 		ip.setColor(Color.white);
 		ip.fill();
 		ip.setColor(Color.black);
 		String sValue = Double.isNaN(value) ? "---" : d2s(value);
 		String sCount = count == -1 ? "---" : "" + count;
-		int row = showBins ? row5 : row4;
-		ip.drawString("Value: " + sValue, col1, row);
-		ip.drawString("Count: " + sCount, col2, row);
+		int row = windowProps.showBins ? windowProps.row5 : windowProps.row4;
+		ip.drawString("Value: " + sValue, windowProps.col1, row);
+		ip.drawString("Count: " + sCount, windowProps.col2, row);
 	}
 
 	private String d2s(double d) {
@@ -447,23 +342,25 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 	/** Returns the histogram values as a ResultsTable. */
 	public ResultsTable getResultsTable() {
 		int decimalPlaces = Analyzer.getPrecision();
-		if (digits == 0 && stats.binSize != 1.0)
-			digits = decimalPlaces;
+		if (windowProps.digits == 0 && windowProps.stats.binSize != 1.0)
+			windowProps.digits = decimalPlaces;
 		ResultsTable rt = new ResultsTable();
-		rt.setPrecision(digits);
-		String vheading = stats.binSize == 1.0 ? "value" : "bin start";
-		if (cal.calibrated() && !cal.isSigned16Bit()) {
-			for (int i = 0; i < stats.nBins; i++) {
+		rt.setPrecision(windowProps.digits);
+		String vheading = windowProps.stats.binSize == 1.0 ? "value" : "bin start";
+		if (windowProps.cal.calibrated() && !windowProps.cal.isSigned16Bit()) {
+			for (int i = 0; i < windowProps.stats.nBins; i++) {
 				rt.setValue("level", i, i);
-				rt.setValue(vheading, i, cal.getCValue(stats.histMin + i * stats.binSize));
-				rt.setValue("count", i, histogram[i]);
+				rt.setValue(vheading, i,
+						windowProps.cal.getCValue(windowProps.stats.histMin + i * windowProps.stats.binSize));
+				rt.setValue("count", i, windowProps.histogram[i]);
 			}
 		} else {
-			for (int i = 0; i < stats.nBins; i++) {
-				if (stats.binSize != 1.0)
+			for (int i = 0; i < windowProps.stats.nBins; i++) {
+				if (windowProps.stats.binSize != 1.0)
 					rt.setValue("index", i, i);
-				rt.setValue(vheading, i, cal.getCValue(stats.histMin + i * stats.binSize));
-				rt.setValue("count", i, histogram[i]);
+				rt.setValue(vheading, i,
+						windowProps.cal.getCValue(windowProps.stats.histMin + i * windowProps.stats.binSize));
+				rt.setValue("count", i, windowProps.histogram[i]);
 			}
 		}
 		return rt;
@@ -486,10 +383,12 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 			return;
 		}
 		IJ.showStatus("Copying histogram values...");
-		CharArrayWriter aw = new CharArrayWriter(stats.nBins * 4);
+		CharArrayWriter aw = new CharArrayWriter(windowProps.stats.nBins * 4);
 		PrintWriter pw = new PrintWriter(aw);
-		for (int i = 0; i < stats.nBins; i++)
-			pw.print(ResultsTable.d2s(cal.getCValue(stats.histMin + i * stats.binSize), digits) + "\t" + histogram[i]
+		for (int i = 0; i < windowProps.stats.nBins; i++)
+			pw.print(ResultsTable.d2s(
+					windowProps.cal.getCValue(windowProps.stats.histMin + i * windowProps.stats.binSize),
+					windowProps.digits) + "\t" + windowProps.histogram[i]
 					+ "\n");
 		String text = aw.toString();
 		pw.close();
@@ -507,11 +406,11 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		ip.resetRoi();
 		ip.setColor(Color.black);
 		ip.setLineWidth(1);
-		if (logScale) {
-			drawLogPlot(yMax > 0 ? yMax : newMaxCount, ip);
-			drawPlot(yMax > 0 ? yMax : newMaxCount, ip);
+		if (windowProps.logScale) {
+			drawLogPlot(windowProps.yMax > 0 ? windowProps.yMax : windowProps.newMaxCount, ip);
+			drawPlot(windowProps.yMax > 0 ? windowProps.yMax : windowProps.newMaxCount, ip);
 		} else
-			drawPlot(yMax > 0 ? yMax : newMaxCount, ip);
+			drawPlot(windowProps.yMax > 0 ? windowProps.yMax : windowProps.newMaxCount, ip);
 		this.imp.updateAndDraw();
 	}
 
@@ -526,7 +425,7 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		else if (b == copy)
 			copyToClipboard();
 		else if (b == log) {
-			logScale = !logScale;
+			windowProps.logScale = !windowProps.logScale;
 			replot();
 		}
 	}
@@ -535,20 +434,20 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 	}
 
 	public int[] getHistogram() {
-		int[] hist = new int[histogram.length];
-		for (int i = 0; i < histogram.length; i++)
-			hist[i] = (int) histogram[i];
+		int[] hist = new int[windowProps.histogram.length];
+		for (int i = 0; i < windowProps.histogram.length; i++)
+			hist[i] = (int) windowProps.histogram[i];
 		return hist;
 	}
 
 	public long[] getLongHistogram() {
-		return histogram;
+		return windowProps.histogram;
 	}
 
 	public double[] getXValues() {
-		double[] values = new double[stats.nBins];
-		for (int i = 0; i < stats.nBins; i++)
-			values[i] = cal.getCValue(stats.histMin + i * stats.binSize);
+		double[] values = new double[windowProps.stats.nBins];
+		for (int i = 0; i < windowProps.stats.nBins; i++)
+			values[i] = windowProps.cal.getCValue(windowProps.stats.histMin + i * windowProps.stats.binSize);
 		return values;
 	}
 
@@ -560,16 +459,16 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 	}
 
 	private void changeChannel() {
-		ImagePlus imp = WindowManager.getImage(srcImageID);
+		ImagePlus imp = WindowManager.getImage(windowProps.srcImageID);
 		if (imp == null || !imp.isRGB())
 			return;
 		else {
-			rgbMode++;
-			if (rgbMode > BLUE)
-				rgbMode = INTENSITY1;
+			windowProps.rgbMode++;
+			if (windowProps.rgbMode > BLUE)
+				windowProps.rgbMode = INTENSITY1;
 			ColorProcessor cp = (ColorProcessor) imp.getProcessor();
 			boolean weighted = cp.weightedHistogram();
-			if (rgbMode == INTENSITY2) {
+			if (windowProps.rgbMode == INTENSITY2) {
 				double[] weights = cp.getRGBWeights();
 				if (weighted)
 					cp.setRGBWeights(1d / 3d, 1d / 3d, 1d / 3d);
@@ -588,7 +487,7 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 
 	private void enableLiveMode() {
 		if (bgThread == null) {
-			srcImp = WindowManager.getImage(srcImageID);
+			srcImp = WindowManager.getImage(windowProps.srcImageID);
 			if (srcImp == null)
 				return;
 			bgThread = new Thread(this, "Live Histogram");
@@ -683,351 +582,11 @@ public class HistogramWindow extends ImageWindow implements Measurements, Action
 		}
 	}
 
-	public static double getScale() {
-		return SCALE;
-	}
-
-	public static int getHistWidth() {
-		return HIST_WIDTH;
-	}
-
-	public static int getHistHeight() {
-		return HIST_HEIGHT;
-	}
-
-	public static int getXmargin() {
-		return XMARGIN;
-	}
-
-	public static int getYmargin() {
-		return YMARGIN;
-	}
-
-	public static int getWinWidth() {
-		return WIN_WIDTH;
-	}
-
-	public static int getWinHeight() {
-		return WIN_HEIGHT;
-	}
-
-	public static int getBarHeight() {
-		return BAR_HEIGHT;
-	}
-
-	public static int getIntensity1() {
-		return INTENSITY1;
-	}
-
-	public static int getIntensity2() {
-		return INTENSITY2;
-	}
-
-	public static int getRgb() {
-		return RGB;
-	}
-
-	public static int getRed() {
-		return RED;
-	}
-
-	public static int getGreen() {
-		return GREEN;
-	}
-
-	public static int getBlue() {
-		return BLUE;
-	}
-
-	public ImageStatistics getStats() {
-		return stats;
-	}
-
-	public void setStats(ImageStatistics stats) {
-		this.stats = stats;
-	}
-
-	public void setHistogram(long[] histogram) {
-		this.histogram = histogram;
-	}
-
-	public LookUpTable getLut() {
-		return lut;
-	}
-
-	public void setLut(LookUpTable lut) {
-		this.lut = lut;
-	}
-
-	public Rectangle getFrame() {
-		return frame;
-	}
-
-	public void setFrame(Rectangle frame) {
-		this.frame = frame;
-	}
-
-	public Button getList() {
-		return list;
-	}
-
-	public void setList(Button list) {
-		this.list = list;
-	}
-
-	public Button getSave() {
-		return save;
-	}
-
-	public void setSave(Button save) {
-		this.save = save;
-	}
-
-	public Button getCopy() {
-		return copy;
-	}
-
-	public void setCopy(Button copy) {
-		this.copy = copy;
-	}
-
-	public Button getLog() {
-		return log;
-	}
-
-	public void setLog(Button log) {
-		this.log = log;
-	}
-
-	public Button getLive() {
-		return live;
-	}
-
-	public void setLive(Button live) {
-		this.live = live;
-	}
-
-	public void setRgb(Button rgb) {
-		this.rgb = rgb;
-	}
-
-	public Label getValue() {
-		return value;
-	}
-
-	public void setValue(Label value) {
-		this.value = value;
-	}
-
-	public Label getCount() {
-		return count;
-	}
-
-	public void setCount(Label count) {
-		this.count = count;
-	}
-
-	public static String getDefaultDirectory() {
-		return defaultDirectory;
-	}
-
-	public static void setDefaultDirectory(String defaultDirectory) {
-		HistogramWindow.defaultDirectory = defaultDirectory;
-	}
-
-	public int getDecimalPlaces() {
-		return decimalPlaces;
-	}
-
-	public void setDecimalPlaces(int decimalPlaces) {
-		this.decimalPlaces = decimalPlaces;
-	}
-
-	public int getDigits() {
-		return digits;
-	}
-
-	public void setDigits(int digits) {
-		this.digits = digits;
-	}
-
-	public long getNewMaxCount() {
-		return newMaxCount;
-	}
-
-	public void setNewMaxCount(long newMaxCount) {
-		this.newMaxCount = newMaxCount;
-	}
-
-	public int getPlotScale() {
-		return plotScale;
-	}
-
-	public void setPlotScale(int plotScale) {
-		this.plotScale = plotScale;
-	}
-
-	public boolean isLogScale() {
-		return logScale;
-	}
-
-	public void setLogScale(boolean logScale) {
-		this.logScale = logScale;
-	}
-
-	public Calibration getCal() {
-		return cal;
-	}
-
-	public void setCal(Calibration cal) {
-		this.cal = cal;
-	}
-
-	public int getyMax() {
-		return yMax;
-	}
-
-	public void setyMax(int yMax) {
-		this.yMax = yMax;
-	}
-
-	public static int getnBins() {
-		return nBins;
-	}
-
-	public static void setnBins(int nBins) {
-		HistogramWindow.nBins = nBins;
-	}
-
-	public int getSrcImageID() {
-		return srcImageID;
-	}
-
-	public void setSrcImageID(int srcImageID) {
-		this.srcImageID = srcImageID;
-	}
-
-	public ImagePlus getSrcImp() {
-		return srcImp;
-	}
-
-	public void setSrcImp(ImagePlus srcImp) {
-		this.srcImp = srcImp;
-	}
-
-	public Thread getBgThread() {
-		return bgThread;
-	}
-
-	public void setBgThread(Thread bgThread) {
-		this.bgThread = bgThread;
-	}
-
-	public boolean isDoUpdate() {
-		return doUpdate;
-	}
-
-	public void setDoUpdate(boolean doUpdate) {
-		this.doUpdate = doUpdate;
-	}
-
-	public int getRgbMode() {
-		return rgbMode;
-	}
-
-	public void setRgbMode(int rgbMode) {
-		this.rgbMode = rgbMode;
-	}
-
-	public String getBlankLabel() {
-		return blankLabel;
-	}
-
-	public void setBlankLabel(String blankLabel) {
-		this.blankLabel = blankLabel;
-	}
-
-	public boolean isStackHistogram() {
-		return stackHistogram;
-	}
-
-	public void setStackHistogram(boolean stackHistogram) {
-		this.stackHistogram = stackHistogram;
-	}
-
-	public Font getFont() {
-		return font;
-	}
-
-	public void setFont(Font font) {
-		this.font = font;
-	}
-
-	public boolean isShowBins() {
-		return showBins;
-	}
-
-	public void setShowBins(boolean showBins) {
-		this.showBins = showBins;
-	}
-
-	public int getCol1() {
-		return col1;
-	}
-
-	public void setCol1(int col1) {
-		this.col1 = col1;
-	}
-
-	public int getCol2() {
-		return col2;
-	}
-
-	public void setCol2(int col2) {
-		this.col2 = col2;
-	}
-
-	public int getRow1() {
-		return row1;
-	}
-
-	public void setRow1(int row1) {
-		this.row1 = row1;
-	}
-
-	public int getRow2() {
-		return row2;
-	}
-
-	public void setRow2(int row2) {
-		this.row2 = row2;
-	}
-
-	public int getRow3() {
-		return row3;
-	}
-
-	public void setRow3(int row3) {
-		this.row3 = row3;
-	}
-
-	public int getRow4() {
-		return row4;
-	}
-
-	public void setRow4(int row4) {
-		this.row4 = row4;
-	}
-
-	public int getRow5() {
-		return row5;
-	}
-
-	public void setRow5(int row5) {
-		this.row5 = row5;
-	}
-
 	public boolean shouldDrawLogPlot() {
-		return logScale || IJ.shiftKeyDown() && !liveMode();
+		return windowProps.logScale || IJ.shiftKeyDown() && !liveMode();
+	}
+
+	public HistogramDrawProperties getHistogramDrawProperties() {
+		return windowProps;
 	}
 }
